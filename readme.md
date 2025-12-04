@@ -1,86 +1,623 @@
-# ESP32 Car Controller
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deteksi Warna dengan TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
 
-https://github.com/user-attachments/assets/84193342-55cf-44d7-b9a0-a4867b62d64b
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 900px;
+            width: 100%;
+        }
 
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
 
-Panduan penggunaan dan instalasi untuk mobil kontrol Wi-Fi berbasis ESP32.
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
 
-## Cara Penggunaan
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
 
-### 1. Upload Sketch ke ESP32
+        #webcam {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1); /* Mirror effect */
+        }
 
-Upload sketch program yang telah disediakan ke board ESP32 menggunakan Arduino IDE atau platform lainnya.
+        .color-picker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+            cursor: crosshair;
+            pointer-events: none;
+        }
 
-### 2. Power Supply
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
 
-Nyalakan driver dan motor dengan baterai/power pack terpisah. Pastikan untuk menyatukan GND dengan ESP32.
+        button {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
 
-**Peringatan:** Jangan menghubungkan sumber daya motor langsung ke ESP32 karena dapat menyebabkan kerusakan akibat beda tegangan.
+        #startBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
 
-### 3. Koneksi Wi-Fi
+        #startBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
 
-Dari ponsel atau laptop, sambungkan ke jaringan Wi-Fi yang dipancarkan ESP32:
+        #startBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-- SSID: **ESP32-Car**
-- Password: **12345678**
+        #captureBtn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
 
-### 4. Akses Kontrol Web
+        #captureBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 87, 108, 0.4);
+        }
 
-Buka browser dan akses alamat: **http://192.168.4.1**
+        .results {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
 
-Halaman kontrol akan muncul dengan antarmuka yang mudah digunakan.
+        .result-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
 
-### 5. Kontrol Mobil
+        .color-preview {
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            border: 3px solid #e0e0e0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
 
-Tekan dan tahan tombol arah untuk menggerakkan mobil. Lepaskan tombol untuk berhenti.
+        .color-info {
+            flex: 1;
+        }
 
-Gunakan slider untuk mengatur kecepatan mobil sesuai keinginan.
+        .color-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
 
-## Koneksi L9110S
+        .color-values {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
 
-Jika menggunakan driver motor L9110S (dengan pin A-1A/A-1B dan B-1A/B-1B), hubungkan sebagai berikut:
+        .color-value {
+            font-size: 14px;
+            color: #666;
+            font-family: 'Courier New', monospace;
+        }
 
-### Diagram Koneksi
-ESP32 → L9110S Motor Driver
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            color: #1976d2;
+            font-weight: 600;
+        }
 
-| ESP32 GPIO | L9110S Pin | Fungsi |
-|------------|------------|--------|
-| 26         | A-1A       | Motor kiri - kontrol arah 1 |
-| 27         | A-1B       | Motor kiri - kontrol arah 2 |
-| 32         | B-1A       | Motor kanan - kontrol arah 1 |
-| 14         | B-1B       | Motor kanan - kontrol arah 2 |
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
 
-**Catatan:** Abaikan pin ENA/ENB pada L9110S (tidak ada). Untuk kontrol kecepatan, gunakan PWM pada GPIO25 untuk motor kiri dan GPIO33 untuk motor kanan.
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
 
-**Alternatif:** Jika ingin kontrol kecepatan yang lebih halus, pertimbangkan untuk menggunakan modul driver yang mendukung pin ENA/ENB seperti L298N atau L293D.
+        .history {
+            margin-top: 30px;
+        }
 
-## Pemecahan Masalah
+        .history h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
 
-### Motor Berputar Terbalik
+        .history-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+        }
 
-Jika motor berputar dengan arah yang terbalik:
+        .history-item {
+            aspect-ratio: 1;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
 
-- Ubah nilai `LEFT_REVERSED` atau `RIGHT_REVERSED` menjadi `true` dalam kode program, atau
-- Tukar kabel + dan - motor yang terhubung ke driver
+        .history-item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
 
-### Kontrol Kecepatan Tidak Berfungsi
+        .history-item-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px;
+            font-size: 11px;
+            text-align: center;
+        }
 
-Jika kontrol kecepatan tidak berfungsi dengan L9110S:
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
 
-- Ganti nilai `ledcWrite(...)` menjadi 255 dan kendalikan motor hanya dengan HIGH/LOW pada pin IN
-- Atau sambungkan GPIO25 ke A-1A melalui resistor 1kΩ (opsional)
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-## Fitur Tambahan yang Tersedia
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
 
-Jika membutuhkan versi dengan fitur tambahan, berikut varian yang dapat disiapkan:
+            h1 {
+                font-size: 24px;
+            }
 
-- **Station mode** - ESP32 terhubung ke router Wi-Fi existing
-- **Joystick virtual** - Kontrol dengan joystick pada antarmuka web
-- **WebSocket realtime** - Respons kontrol yang lebih cepat dan realtime
+            .controls {
+                flex-direction: column;
+            }
 
-Hubungi developer untuk mendapatkan varian dengan fitur-fitur tersebut.
+            button {
+                width: 100%;
+            }
+        }
 
----
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
 
-© 2023 ESP32 Car Controller Project | Dokumentasi ini diperbarui terakhir pada 15 September 2023
+        .info-box p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Deteksi Warna dengan TensorFlow.js</h1>
+        <p class="subtitle">Tugas Mata Kuliah IoT - Real-time Color Detection</p>
+
+        <div class="info-box">
+            <p><strong>📌 Cara Penggunaan:</strong></p>
+            <p>1. Klik tombol "Mulai Kamera" untuk mengaktifkan webcam</p>
+            <p>2. Arahkan objek ke area tengah (lingkaran putih)</p>
+            <p>3. Klik "Deteksi Warna" untuk menganalisis warna</p>
+        </div>
+
+        <div id="status" class="status">
+            Memuat TensorFlow.js... <span class="loading"></span>
+        </div>
+
+        <div class="video-container" id="videoContainer" style="display: none;">
+            <video id="webcam" autoplay playsinline></video>
+            <div class="color-picker" id="colorPicker"></div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" disabled>Mulai Kamera</button>
+            <button id="captureBtn" style="display: none;">🎨 Deteksi Warna</button>
+        </div>
+
+        <div class="results" id="results" style="display: none;">
+            <div class="result-item">
+                <div class="color-preview" id="colorPreview"></div>
+                <div class="color-info">
+                    <div class="color-name" id="colorName">-</div>
+                    <div class="color-values">
+                        <span class="color-value" id="rgbValue">RGB: -</span>
+                        <span class="color-value" id="hexValue">HEX: -</span>
+                        <span class="color-value" id="hslValue">HSL: -</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="history" id="historySection" style="display: none;">
+            <h3>📜 Riwayat Deteksi</h3>
+            <div class="history-items" id="historyItems"></div>
+        </div>
+    </div>
+
+    <script>
+        let video;
+        let canvas;
+        let ctx;
+        let stream;
+        let detectionHistory = [];
+
+        const statusEl = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const videoContainer = document.getElementById('videoContainer');
+        const resultsEl = document.getElementById('results');
+        const historySection = document.getElementById('historySection');
+        const historyItems = document.getElementById('historyItems');
+
+        // Color database for name detection
+        const colorDatabase = [
+            { name: 'Merah', rgb: [255, 0, 0], range: 30 },
+            { name: 'Merah Tua', rgb: [139, 0, 0], range: 30 },
+            { name: 'Merah Muda', rgb: [255, 192, 203], range: 30 },
+            { name: 'Oranye', rgb: [255, 165, 0], range: 30 },
+            { name: 'Kuning', rgb: [255, 255, 0], range: 30 },
+            { name: 'Hijau', rgb: [0, 255, 0], range: 30 },
+            { name: 'Hijau Tua', rgb: [0, 128, 0], range: 30 },
+            { name: 'Hijau Muda', rgb: [144, 238, 144], range: 30 },
+            { name: 'Biru', rgb: [0, 0, 255], range: 30 },
+            { name: 'Biru Muda', rgb: [173, 216, 230], range: 30 },
+            { name: 'Biru Tua', rgb: [0, 0, 139], range: 30 },
+            { name: 'Ungu', rgb: [128, 0, 128], range: 30 },
+            { name: 'Pink', rgb: [255, 105, 180], range: 30 },
+            { name: 'Cokelat', rgb: [165, 42, 42], range: 30 },
+            { name: 'Hitam', rgb: [0, 0, 0], range: 50 },
+            { name: 'Putih', rgb: [255, 255, 255], range: 50 },
+            { name: 'Abu-abu', rgb: [128, 128, 128], range: 50 },
+            { name: 'Cyan', rgb: [0, 255, 255], range: 30 },
+            { name: 'Magenta', rgb: [255, 0, 255], range: 30 },
+            { name: 'Emas', rgb: [255, 215, 0], range: 30 },
+            { name: 'Perak', rgb: [192, 192, 192], range: 30 }
+        ];
+
+        // Initialize TensorFlow
+        async function initTensorFlow() {
+            try {
+                await tf.ready();
+                console.log('TensorFlow.js ready!');
+                console.log('Backend:', tf.getBackend());
+                
+                statusEl.textContent = '✅ TensorFlow.js siap! Klik "Mulai Kamera"';
+                statusEl.className = 'status success';
+                startBtn.disabled = false;
+            } catch (error) {
+                console.error('Error loading TensorFlow:', error);
+                statusEl.textContent = '❌ Error memuat TensorFlow.js';
+                statusEl.className = 'status error';
+            }
+        }
+
+        // Start webcam
+        async function startWebcam() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    } 
+                });
+                
+                video = document.getElementById('webcam');
+                video.srcObject = stream;
+                
+                await video.play();
+                
+                // Create canvas for color detection
+                canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx = canvas.getContext('2d');
+                
+                videoContainer.style.display = 'block';
+                startBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+                statusEl.textContent = '📹 Kamera aktif! Arahkan objek ke tengah lingkaran';
+                statusEl.className = 'status success';
+                
+                console.log('Webcam started successfully');
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+                statusEl.textContent = '❌ Tidak dapat mengakses kamera. Pastikan izin diberikan.';
+                statusEl.className = 'status error';
+            }
+        }
+
+        // Get color from center of video
+        function getColorFromCenter() {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Get pixel from center
+            const centerX = Math.floor(canvas.width / 2);
+            const centerY = Math.floor(canvas.height / 2);
+            
+            // Get average color from small area (10x10 pixels)
+            let r = 0, g = 0, b = 0;
+            const sampleSize = 10;
+            let count = 0;
+            
+            for (let x = centerX - sampleSize; x <= centerX + sampleSize; x++) {
+                for (let y = centerY - sampleSize; y <= centerY + sampleSize; y++) {
+                    const pixel = ctx.getImageData(x, y, 1, 1).data;
+                    r += pixel[0];
+                    g += pixel[1];
+                    b += pixel[2];
+                    count++;
+                }
+            }
+            
+            r = Math.round(r / count);
+            g = Math.round(g / count);
+            b = Math.round(b / count);
+            
+            return { r, g, b };
+        }
+
+        // Calculate color distance
+        function colorDistance(rgb1, rgb2) {
+            return Math.sqrt(
+                Math.pow(rgb1[0] - rgb2[0], 2) +
+                Math.pow(rgb1[1] - rgb2[1], 2) +
+                Math.pow(rgb1[2] - rgb2[2], 2)
+            );
+        }
+
+        // Find closest color name
+        function getColorName(r, g, b) {
+            let closestColor = 'Tidak Dikenal';
+            let minDistance = Infinity;
+            
+            colorDatabase.forEach(color => {
+                const distance = colorDistance([r, g, b], color.rgb);
+                if (distance < minDistance && distance <= color.range) {
+                    minDistance = distance;
+                    closestColor = color.name;
+                }
+            });
+            
+            // Additional check for grayscale
+            if (Math.abs(r - g) < 30 && Math.abs(g - b) < 30 && Math.abs(r - b) < 30) {
+                const avg = (r + g + b) / 3;
+                if (avg < 50) closestColor = 'Hitam';
+                else if (avg > 200) closestColor = 'Putih';
+                else closestColor = 'Abu-abu';
+            }
+            
+            return closestColor;
+        }
+
+        // RGB to Hex
+        function rgbToHex(r, g, b) {
+            return '#' + [r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('');
+        }
+
+        // RGB to HSL
+        function rgbToHsl(r, g, b) {
+            r /= 255;
+            g /= 255;
+            b /= 255;
+            
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            
+            if (max === min) {
+                h = s = 0;
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                
+                switch (max) {
+                    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                    case g: h = ((b - r) / d + 2) / 6; break;
+                    case b: h = ((r - g) / d + 4) / 6; break;
+                }
+            }
+            
+            return {
+                h: Math.round(h * 360),
+                s: Math.round(s * 100),
+                l: Math.round(l * 100)
+            };
+        }
+
+        // Detect color
+        async function detectColor() {
+            if (!video || video.readyState !== 4) {
+                statusEl.textContent = '⚠️ Tunggu kamera siap...';
+                statusEl.className = 'status';
+                return;
+            }
+            
+            statusEl.textContent = '🔍 Mendeteksi warna...';
+            statusEl.className = 'status';
+            
+            // Get color
+            const color = getColorFromCenter();
+            const { r, g, b } = color;
+            
+            // Get color name
+            const colorName = getColorName(r, g, b);
+            const hex = rgbToHex(r, g, b);
+            const hsl = rgbToHsl(r, g, b);
+            
+            // Display results
+            document.getElementById('colorPreview').style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            document.getElementById('colorName').textContent = colorName;
+            document.getElementById('rgbValue').textContent = `RGB: (${r}, ${g}, ${b})`;
+            document.getElementById('hexValue').textContent = `HEX: ${hex}`;
+            document.getElementById('hslValue').textContent = `HSL: (${hsl.h}°, ${hsl.s}%, ${hsl.l}%)`;
+            
+            resultsEl.style.display = 'block';
+            statusEl.textContent = `✅ Warna terdeteksi: ${colorName}`;
+            statusEl.className = 'status success';
+            
+            // Add to history
+            addToHistory({ colorName, rgb: `rgb(${r}, ${g}, ${b})`, hex, r, g, b });
+            
+            console.log('Color detected:', { colorName, r, g, b, hex, hsl });
+        }
+
+        // Add to history
+        function addToHistory(colorData) {
+            detectionHistory.unshift(colorData);
+            if (detectionHistory.length > 12) {
+                detectionHistory.pop();
+            }
+            
+            renderHistory();
+        }
+
+        // Render history
+        function renderHistory() {
+            if (detectionHistory.length === 0) {
+                historySection.style.display = 'none';
+                return;
+            }
+            
+            historySection.style.display = 'block';
+            historyItems.innerHTML = '';
+            
+            detectionHistory.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.style.backgroundColor = item.rgb;
+                div.innerHTML = `<div class="history-item-name">${item.colorName}</div>`;
+                div.onclick = () => showHistoryDetail(item);
+                historyItems.appendChild(div);
+            });
+        }
+
+        // Show history detail
+        function showHistoryDetail(item) {
+            document.getElementById('colorPreview').style.backgroundColor = item.rgb;
+            document.getElementById('colorName').textContent = item.colorName;
+            document.getElementById('rgbValue').textContent = `RGB: (${item.r}, ${item.g}, ${item.b})`;
+            document.getElementById('hexValue').textContent = `HEX: ${item.hex}`;
+            
+            const hsl = rgbToHsl(item.r, item.g, item.b);
+            document.getElementById('hslValue').textContent = `HSL: (${hsl.h}°, ${hsl.s}%, ${hsl.l}%)`;
+            
+            resultsEl.style.display = 'block';
+            statusEl.textContent = `📋 Menampilkan dari riwayat: ${item.colorName}`;
+            statusEl.className = 'status';
+        }
+
+        // Event listeners
+        startBtn.addEventListener('click', startWebcam);
+        captureBtn.addEventListener('click', detectColor);
+
+        // Initialize on load
+        window.addEventListener('load', initTensorFlow);
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
